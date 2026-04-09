@@ -81,8 +81,8 @@ pip install flask flask-cors
    ```bash
    python api_server.py
    ```
-4. **Access the App**: Once the terminal says `Running on http://127.0.0.1:5000`, open your browser and navigate to:
-   [http://localhost:5000](http://localhost:5000)
+4. **Access the App**: Once the terminal says `Running on http://127.0.0.1:5005`, open your browser and navigate to:
+   [http://localhost:5005](http://localhost:5005)
 
 ### 3. Running via Command Line (CLI)
 You can also run the transpiler directly on a C file without the UI:

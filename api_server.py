@@ -101,5 +101,5 @@ def transpile():
         return jsonify({'error': f"Internal Error: {str(e)}\n{traceback.format_exc()}"}), 200
 
 if __name__ == '__main__':
-    # Use the port 5000 by default
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Use port 5005 to avoid macOS AirPlay conflict on 5000
+    app.run(host='0.0.0.0', port=5005, debug=True)
