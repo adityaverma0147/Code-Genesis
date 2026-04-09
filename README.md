@@ -62,5 +62,46 @@ Applies optimization techniques such as:
   - Parser
   - Semantic Analyzer
   - IR Generator
-  - Optimizer
   - Code Generator
+
+---
+
+# How to Run
+
+### 1. Prerequisites
+Ensure you have **Python 3.8+** installed. You will also need the following dependencies:
+```bash
+pip install flask flask-cors
+```
+
+### 2. Running in VS Code
+1. **Open the Project**: Open the `Code-Genesis` folder in VS Code.
+2. **Open Terminal**: Go to `Terminal` -> `New Terminal` (or press ``Ctrl + ` ``).
+3. **Launch the Web UI**:
+   ```bash
+   python api_server.py
+   ```
+4. **Access the App**: Once the terminal says `Running on http://127.0.0.1:5000`, open your browser and navigate to:
+   [http://localhost:5000](http://localhost:5000)
+
+### 3. Running via Command Line (CLI)
+You can also run the transpiler directly on a C file without the UI:
+```bash
+python main.py sample.c
+```
+Use `-v` for verbose output (shows all compiler phases):
+```bash
+python main.py sample.c -v
+```
+
+### 4. Running Tests
+To verify all compiler phases are working correctly:
+```bash
+python test_all.py
+```
+
+---
+
+# Team Striver
+- **Project**: Code Genesis - C to Python Transpiler
+- **Course**: Compiler Design (TCS-601)
