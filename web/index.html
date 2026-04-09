@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Genesis: C → Python Transpiler</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-shell">
+    <!-- ── TOPBAR ── -->
+    <header class="topbar">
+        <a href="#" class="logo">
+            <div class="logo-mark">⇄</div>
+            <span class="logo-name">Code<em>Genesis</em></span>
+        </a>
+
+        <div class="topbar-hint">
+            <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to run
+        </div>
+
+        <div class="user-chip">
+            <div class="user-avatar" id="user-avatar">CG</div>
+            <span class="user-name" id="user-name">Developer</span>
+        </div>
+    </header>
+
+    <!-- ── STATUS BAR ── -->
+    <div class="statusbar">
+        <div class="status-dot" id="st-dot"></div>
+        <span class="status-text" id="st-text">Ready — write some C and hit ▶ Transpile</span>
+        <div class="live-badge" id="live-badge">
+            <div class="live-dot"></div> Live
+        </div>
+    </div>
+
+    <!-- ── WORKSPACE ── -->
+    <div class="workspace">
+        <!-- ... (all the content previously inside workspace stays same) ... -->
+        
+        <!-- ═══ EDITOR ═══ -->
+        <div class="editor-side">
+            <div class="panel-hdr">
+                <div class="panel-hdr-left">
+                    <span class="file-dot"></span>
+                    input.c
+                </div>
+                <span class="char-count" id="char-count">0 chars · 1 line</span>
+            </div>
+
+            <div class="editor-wrap">
+                <div class="line-nums" id="line-nums">1</div>
+                <textarea id="editor" spellcheck="false" placeholder="/* Write C code here */
+int main() {
+    int x = 10;
+    printf(x);
+    return 0;
+}"></textarea>
+            </div>
+
+            <div class="examples-strip">
+                <div class="strip-label">Quick examples</div>
+                <div class="chips">
+                    <span class="chip" onclick="loadEx('hello')">Hello World</span>
+                    <span class="chip" onclick="loadEx('factorial')">Factorial</span>
+                    <span class="chip" onclick="loadEx('loop')">While Loop</span>
+                    <span class="chip" onclick="loadEx('for')">For Loop</span>
+                    <span class="chip" onclick="loadEx('math')">Math Ops</span>
+                    <span class="chip" onclick="loadEx('pointers')">Pointers & Macros</span>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <button class="btn btn-primary" id="btn-run" onclick="transpileUI()">
+                    ▶ Transpile
+                    <span class="spinner" id="spinner"></span>
+                </button>
+                <button class="btn btn-ghost danger" onclick="clearAll()">✕ Clear</button>
+                <button class="btn btn-ghost cyan btn-spacer" onclick="copyPython()">⎘ Copy Python</button>
+            </div>
+        </div>
+
+        <!-- ═══ OUTPUT ═══ -->
+        <div class="output-side">
+            <div class="tab-row">
+                <div class="tab-btn active" data-tab="tokens" onclick="switchTab('tokens')">
+                    <span class="tab-pip"></span>Tokens
+                </div>
+                <div class="tab-btn" data-tab="ast" onclick="switchTab('ast')">
+                    <span class="tab-pip"></span>AST
+                </div>
+                <div class="tab-btn" data-tab="sym" onclick="switchTab('sym')">
+                    <span class="tab-pip"></span>Symbols
+                </div>
+                <div class="tab-btn" data-tab="semantic" onclick="switchTab('semantic')">
+                    <span class="tab-pip"></span>Semantic
+                </div>
+                <div class="tab-btn" data-tab="ir" onclick="switchTab('ir')">
+                    <span class="tab-pip"></span>IR (TAC)
+                </div>
+                <div class="tab-btn" data-tab="python" onclick="switchTab('python')">
+                    <span class="tab-pip"></span>Python
+                </div>
+            </div>
+
+            <div class="panels">
+                <div class="panel active" id="panel-tokens">
+                    <pre class="code-block" id="out-tokens">Token stream will appear here.</pre>
+                </div>
+                <div class="panel" id="panel-ast">
+                    <pre class="code-block" id="out-ast">Abstract Syntax Tree will appear here.</pre>
+                </div>
+                <div class="panel" id="panel-sym">
+                    <pre class="code-block" id="out-sym">Symbol table will appear here.</pre>
+                </div>
+                <div class="panel" id="panel-semantic">
+                    <pre class="code-block" id="out-semantic">Semantic analysis results will appear here.</pre>
+                </div>
+                <div class="panel" id="panel-ir">
+                    <pre class="code-block" id="out-ir">Intermediate Representation (Three-Address Code) will appear here.</pre>
+                </div>
+                <div class="panel" id="panel-python">
+                    <pre class="code-block" id="out-python">Generated Python code will appear here.</pre>
+                </div>
+            </div>
+
+            <div class="stats-bar">
+                <div class="stat"><span class="stat-lbl">Tokens</span><span class="stat-val" id="s-tokens">—</span></div>
+                <div class="stat"><span class="stat-lbl">IR Instr</span><span class="stat-val" id="s-ir">—</span></div>
+                <div class="stat"><span class="stat-lbl">Symbols</span><span class="stat-val" id="s-syms">—</span></div>
+                <div class="stat"><span class="stat-lbl">PY lines</span><span class="stat-val" id="s-lines">—</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- toast -->
+<div class="toast" id="toast"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
