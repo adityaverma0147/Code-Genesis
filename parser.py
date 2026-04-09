@@ -324,14 +324,14 @@ class Parser:
         name = self.eat('IDENTIFIER').value
         if self.current().type == 'OP' and self.current().value == '++':
             self.eat('OP')
-            return AssignNode(name, BinOpNode(IdentifierNode(name), '+', NumberNode(1)))
+            return AssignNode(IdentifierNode(name), BinOpNode(IdentifierNode(name), '+', NumberNode(1)))
         if self.current().type == 'OP' and self.current().value == '--':
             self.eat('OP')
-            return AssignNode(name, BinOpNode(IdentifierNode(name), '-', NumberNode(1)))
+            return AssignNode(IdentifierNode(name), BinOpNode(IdentifierNode(name), '-', NumberNode(1)))
         # fallback: i = expr
         self.eat('ASSIGN')
         val = self.parse_expr()
-        return AssignNode(name, val)
+        return AssignNode(IdentifierNode(name), val)
 
     def parse_return(self):
         self.eat('KEYWORD', 'return')
