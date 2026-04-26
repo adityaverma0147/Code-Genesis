@@ -7,27 +7,22 @@ from parser import (Parser, ProgramNode, FunctionNode, BlockNode,
 
 
 class SymbolTable:
-    """
-    A scoped symbol table. Each scope is a dict {name: info}.
-    Scopes are stacked; inner scopes can shadow outer ones.
-    """
     def __init__(self):
-        self.scopes = [{}] 
+        self.scopes = [{}]
 
     def enter_scope(self):
         self.scopes.append({})
 
     def exit_scope(self):
-        self.scopes.pop()
+        if len(self.scopes) > 1:
+            self.scopes.pop()
 
     def declare(self, name, var_type, scope_label='local'):
-        # Check for re-declaration in CURRENT scope only
         if name in self.scopes[-1]:
             raise SemanticError(f"Re-declaration of '{name}' in the same scope.")
         self.scopes[-1][name] = {'type': var_type, 'scope': scope_label}
 
     def lookup(self, name):
-        """Search from inner → outer scope."""
         for scope in reversed(self.scopes):
             if name in scope:
                 return scope[name]
@@ -46,26 +41,23 @@ class SymbolTable:
         print("="*50)
 
 
-
 class SemanticError(Exception):
     pass
 
 
-# ---------------------------------------------------------------
-# SEMANTIC ANALYZER
-# ---------------------------------------------------------------
 class SemanticAnalyzer:
     def __init__(self):
         self.symbol_table   = SymbolTable()
         self.errors         = []
-        self.current_fn_ret = None   
+        self.current_fn_ret = None
 
     def error(self, msg):
         self.errors.append(f"[SemanticError] {msg}")
 
-
-
     def analyze(self, node):
+        if node is None:
+            self.error("Cannot analyze empty AST.")
+            return False
         self.visit(node)
         if self.errors:
             print("\n[!] Semantic Errors Found:")
@@ -76,18 +68,21 @@ class SemanticAnalyzer:
         return len(self.errors) == 0
 
     def visit(self, node):
+        if node is None:
+            return
         method = f'visit_{type(node).__name__}'
         visitor = getattr(self, method, self.generic_visit)
         return visitor(node)
 
     def generic_visit(self, node):
-        pass   
-
+        pass
 
     def visit_ProgramNode(self, node):
         for fn in node.functions:
-            
-            self.symbol_table.declare(fn.name, fn.return_type, 'global')
+            try:
+                self.symbol_table.declare(fn.name, fn.return_type, 'global')
+            except SemanticError as e:
+                self.error(str(e))
             self.visit(fn)
 
     def visit_FunctionNode(self, node):
@@ -160,7 +155,11 @@ class SemanticAnalyzer:
     def visit_ForNode(self, node):
         self.symbol_table.enter_scope()
         if node.init:
-            self.visit(node.init)
+            if isinstance(node.init, list):
+                for stmt in node.init:
+                    self.visit(stmt)
+            else:
+                self.visit(node.init)
         self.visit(node.condition)
         self.visit(node.update)
         self.visit(node.body)
@@ -174,16 +173,12 @@ class SemanticAnalyzer:
             self.visit(arg)
 
     def visit_FunctionCallNode(self, node):
-        
         if self.symbol_table.lookup(node.name) is None:
-            
             builtins = {'printf', 'scanf', 'main'}
             if node.name not in builtins:
                 self.error(f"Call to undeclared function '{node.name}'.")
         for arg in node.args:
             self.visit(arg)
-
-
 
 
 if __name__ == '__main__':

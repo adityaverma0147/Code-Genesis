@@ -1,18 +1,10 @@
-# =============================================================
-# TEST SUITE
-# Course: Compiler Design (TCS-601)
-# Project: Code Genesis - C to Python Transpiler
-# Team: Striver (CD-VI-T080)
-# =============================================================
-# Run all tests:   python tests/test_all.py
-# =============================================================
-
 import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.dirname(__file__))
 from main import transpile
 
 PASS = 0
 FAIL = 0
+
 
 def run_test(name, c_code, expected_fragments):
     global PASS, FAIL
@@ -36,10 +28,6 @@ def run_test(name, c_code, expected_fragments):
         print(f"  FAIL (exception): {e}")
         FAIL += 1
 
-
-# ──────────────────────────────────────────────────────────────
-# TEST CASES
-# ──────────────────────────────────────────────────────────────
 
 run_test(
     "Basic variable declaration and arithmetic",
@@ -153,9 +141,6 @@ int main() {
     ['if (x > 20):', 'print("large")', 'if (x > 5):', 'print("medium")', 'print("small")']
 )
 
-# ──────────────────────────────────────────────────────────────
-# SUMMARY
-# ──────────────────────────────────────────────────────────────
 print(f"\n{'='*50}")
 print(f"TEST SUMMARY:  {PASS} passed,  {FAIL} failed")
 print(f"{'='*50}")

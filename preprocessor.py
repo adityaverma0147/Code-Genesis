@@ -1,40 +1,43 @@
 import re
 
+
 class Preprocessor:
     def __init__(self, source):
-        self.source = source
+        self.source = source if source else ""
         self.macros = {}
         self.includes = []
 
     def preprocess(self):
+        if not self.source.strip():
+            return self.source
+
         lines = self.source.splitlines()
         processed_lines = []
-        
+
         for line in lines:
             stripped = line.strip()
-            
-            # Handle #define
+
             if stripped.startswith('#define'):
                 match = re.match(r'#define\s+(\w+)\s+(.*)', stripped)
                 if match:
                     name, value = match.groups()
                     self.macros[name] = value.strip()
                 continue
-            
-            # Handle #include
+
             if stripped.startswith('#include'):
                 match = re.match(r'#include\s*[<"](.+)[>"]', stripped)
                 if match:
                     self.includes.append(match.group(1))
                 continue
-            
-            # Replace macros in current line
+
             for name, value in self.macros.items():
-                # Use \b to match whole words only
-                line = re.sub(r'\b' + re.escape(name) + r'\b', value, line)
-            
+                try:
+                    line = re.sub(r'\b' + re.escape(name) + r'\b', value, line)
+                except re.error:
+                    pass
+
             processed_lines.append(line)
-            
+
         return "\n".join(processed_lines)
 
     def get_report(self):
@@ -49,6 +52,7 @@ class Preprocessor:
 
     def print_report(self):
         print(self.get_report())
+
 
 if __name__ == '__main__':
     code = """

@@ -1,34 +1,9 @@
-# =============================================================
-# PHASE 5: CODE OPTIMIZER
-# Course: Compiler Design (TCS-601)
-# Project: Code Genesis - C to Python Transpiler
-# Team: Striver (CD-VI-T080)
-# =============================================================
-# Applies three classic optimization passes on the IR (TAC)
-# produced by Phase 4:
-#
-#   1. CONSTANT FOLDING
-#      Evaluate constant expressions at compile time.
-#      Example: t0 = 3 + 4   →   t0 = 7
-#
-#   2. CONSTANT PROPAGATION
-#      Replace variable uses with their known constant values.
-#      Example: x = 7; t1 = x + 2   →   t1 = 7 + 2   →   t1 = 9
-#
-#   3. DEAD CODE ELIMINATION
-#      Remove assignments to temporary/variables whose values
-#      are never used by any subsequent instruction.
-# =============================================================
-
 from ir_generator import IRInstruction
 
 ARITHMETIC_OPS = {'+', '-', '*', '/', '%'}
 COMPARE_OPS    = {'==', '!=', '<', '>', '<=', '>='}
 
 
-# ---------------------------------------------------------------
-# HELPER: is a string a numeric literal?
-# ---------------------------------------------------------------
 def _is_number(s):
     try:
         float(s)
@@ -36,9 +11,12 @@ def _is_number(s):
     except (TypeError, ValueError):
         return False
 
+
 def _eval(a, op, b):
-    """Evaluate a constant binary expression."""
-    a, b = float(a), float(b)
+    try:
+        a, b = float(a), float(b)
+    except (TypeError, ValueError):
+        return None
     result = {
         '+': a + b, '-': a - b,
         '*': a * b, '/': a / b if b != 0 else None,
@@ -49,18 +27,12 @@ def _eval(a, op, b):
     }.get(op)
     if result is None:
         return None
-    # Return int string when possible
     return str(int(result)) if result == int(result) else str(result)
 
 
-# ---------------------------------------------------------------
-# PASS 1: CONSTANT FOLDING
-# ---------------------------------------------------------------
 def constant_folding(instructions):
-    """
-    Replaces   t = <const> op <const>   with   t = <value>.
-    Also handles unary minus on constants.
-    """
+    if not instructions:
+        return []
     optimized = []
     for instr in instructions:
         if instr.op in ARITHMETIC_OPS | COMPARE_OPS:
@@ -80,30 +52,22 @@ def constant_folding(instructions):
     return optimized
 
 
-# ---------------------------------------------------------------
-# PASS 2: CONSTANT PROPAGATION
-# ---------------------------------------------------------------
 def constant_propagation(instructions):
-    """
-    Tracks which variables hold constant values and substitutes
-    those values into later uses.
-    """
-    const_map = {}   # name → constant string value
+    if not instructions:
+        return []
+    const_map = {}
     optimized = []
 
     def resolve(val):
         return const_map.get(val, val)
 
     for instr in instructions:
-        # If this is a simple assignment of a constant, remember it
         if instr.op == '=' and _is_number(instr.arg1):
             const_map[instr.result] = instr.arg1
-        # If a variable is reassigned to a non-constant, forget it
         elif instr.op == '=' and instr.result in const_map:
             if not _is_number(instr.arg1):
                 del const_map[instr.result]
 
-        # Substitute known constants into args
         new_instr = IRInstruction(
             op     = instr.op,
             arg1   = resolve(instr.arg1) if instr.arg1 is not None else None,
@@ -112,33 +76,24 @@ def constant_propagation(instructions):
         )
         optimized.append(new_instr)
 
-    # Run constant folding again after propagation (may expose new folds)
     return constant_folding(optimized)
 
 
-# ---------------------------------------------------------------
-# PASS 3: DEAD CODE ELIMINATION
-# ---------------------------------------------------------------
 def dead_code_elimination(instructions):
-    """
-    Remove assignments whose result is never read.
-    Only removes temporaries (t0, t1, ...) to stay safe.
-    """
-    # Collect all values that are READ (appear as arg1 / arg2)
+    if not instructions:
+        return []
     used = set()
     for instr in instructions:
         if instr.arg1 is not None and not _is_number(instr.arg1):
             used.add(str(instr.arg1).strip('"'))
         if instr.arg2 is not None and not _is_number(instr.arg2):
             used.add(str(instr.arg2).strip('"'))
-        # result of CALL/IF_FALSE/PRINT/RETURN is also "used"
         if instr.op in ('IF_FALSE', 'IF', 'RETURN', 'PRINT', 'PARAM'):
             if instr.arg1:
                 used.add(str(instr.arg1).strip('"'))
 
     optimized = []
     for instr in instructions:
-        # Only eliminate writes to temporaries that are never read
         is_temp_assign = (
             instr.result is not None
             and str(instr.result).startswith('t')
@@ -147,17 +102,14 @@ def dead_code_elimination(instructions):
                                  'PRINT', 'PARAM', 'CALL', 'PARAM_DECL')
         )
         if is_temp_assign and instr.result not in used:
-            continue  # dead — skip
+            continue
         optimized.append(instr)
     return optimized
 
 
-# ---------------------------------------------------------------
-# OPTIMIZER — runs all passes
-# ---------------------------------------------------------------
 class Optimizer:
     def __init__(self, instructions):
-        self.original     = instructions
+        self.original     = instructions if instructions else []
         self.optimized    = None
         self.stats        = {}
 
@@ -179,6 +131,9 @@ class Optimizer:
         return self.optimized
 
     def print_comparison(self):
+        if self.optimized is None:
+            print("No optimization results available. Run optimize() first.")
+            return
         print("\n" + "="*55)
         print("PHASE 5: OPTIMIZED IR (after 3 passes)")
         print("="*55)

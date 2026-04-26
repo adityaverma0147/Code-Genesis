@@ -1,66 +1,31 @@
-# =============================================================
-# PHASE 2: PARSER & AST BUILDER
-# Course: Compiler Design (TCS-601)
-# Project: Code Genesis - C to Python Transpiler
-# Team: Striver (CD-VI-T080)
-# =============================================================
-# This module takes the token list from Phase 1, validates grammar
-# rules, and builds an Abstract Syntax Tree (AST).
-#
-# Supported grammar (simplified C):
-#   program       → function*
-#   function      → type IDENTIFIER '(' params ')' block
-#   block         → '{' statement* '}'
-#   statement     → declaration | assignment | if_stmt |
-#                   while_stmt | for_stmt | return_stmt |
-#                   print_stmt | expr_stmt
-#   declaration   → type IDENTIFIER ('=' expr)? ';'
-#   assignment    → IDENTIFIER '=' expr ';'
-#   if_stmt       → 'if' '(' expr ')' block ('else' block)?
-#   while_stmt    → 'while' '(' expr ')' block
-#   for_stmt      → 'for' '(' init ';' cond ';' update ')' block
-#   return_stmt   → 'return' expr ';'
-#   expr          → comparison (('&&'|'||') comparison)*
-#   comparison    → term (('=='|'!='|'<'|'>'|'<='|'>=') term)*
-#   term          → factor (('+' | '-') factor)*
-#   factor        → unary (('*' | '/' | '%') unary)*
-#   unary         → '-' unary | primary
-#   primary       → INTEGER | FLOAT | STRING | IDENTIFIER
-#                   | '(' expr ')'
-# =============================================================
-
 from lexer import Lexer, Token
 
-# ---------------------------------------------------------------
-# AST NODE CLASSES
-# Each node type represents a grammar construct.
-# ---------------------------------------------------------------
 
 class ProgramNode:
     def __init__(self, functions):
-        self.functions = functions   # list of FunctionNode
+        self.functions = functions
 
 class FunctionNode:
     def __init__(self, return_type, name, params, body):
         self.return_type = return_type
         self.name        = name
-        self.params      = params    # list of (type, name)
-        self.body        = body      # BlockNode
+        self.params      = params
+        self.body        = body
 
 class BlockNode:
     def __init__(self, statements):
-        self.statements = statements # list of statement nodes
+        self.statements = statements
 
 class DeclarationNode:
     def __init__(self, var_type, name, value=None):
         self.var_type = var_type
         self.name     = name
-        self.value    = value        # expr node or None
+        self.value    = value
 
 class AssignNode:
     def __init__(self, target, value):
-        self.target = target         # target node (IdentifierNode or DereferenceNode)
-        self.value  = value           # expr node
+        self.target = target
+        self.value  = value
 
 class IfNode:
     def __init__(self, condition, then_block, else_block=None):
@@ -86,7 +51,7 @@ class ReturnNode:
 
 class PrintNode:
     def __init__(self, args):
-        self.args = args             # list of expr nodes
+        self.args = args
 
 class BinOpNode:
     def __init__(self, left, op, right):
@@ -101,7 +66,7 @@ class UnaryOpNode:
 
 class NumberNode:
     def __init__(self, value):
-        self.value = value           # int or float
+        self.value = value
 
 class StringNode:
     def __init__(self, value):
@@ -119,7 +84,7 @@ class FunctionCallNode:
 class PointerTypeNode:
     def __init__(self, base_type, levels):
         self.base_type = base_type
-        self.levels    = levels   # Number of * stars
+        self.levels    = levels
 
 class DereferenceNode:
     def __init__(self, operand):
@@ -130,15 +95,12 @@ class AddressOfNode:
         self.operand = operand
 
 
-# ---------------------------------------------------------------
-# PARSER CLASS
-# ---------------------------------------------------------------
 class Parser:
     def __init__(self, tokens):
+        if not tokens:
+            raise SyntaxError("No tokens to parse — input may be empty.")
         self.tokens = tokens
         self.pos    = 0
-
-    # ---- Utility helpers ----
 
     def current(self):
         if self.pos < len(self.tokens):
@@ -152,8 +114,12 @@ class Parser:
         return Token('EOF', '', -1)
 
     def eat(self, expected_type=None, expected_value=None):
-        """Consume the current token (with optional validation)."""
         tok = self.current()
+        if tok.type == 'EOF':
+            raise SyntaxError(
+                f"Unexpected end of input. Expected '{expected_type or 'token'}'"
+                + (f" with value '{expected_value}'" if expected_value else "")
+            )
         if expected_type and tok.type != expected_type:
             raise SyntaxError(
                 f"Line {tok.line}: Expected token type '{expected_type}' "
@@ -171,16 +137,16 @@ class Parser:
         return self.current().type == 'KEYWORD' and \
                self.current().value in ('int', 'float', 'char', 'void')
 
-    # ---- Grammar rules ----
-
     def parse(self):
         functions = []
         while self.current().type != 'EOF':
             functions.append(self.parse_function())
+        if not functions:
+            raise SyntaxError("No functions found in the input.")
         return ProgramNode(functions)
 
     def parse_function(self):
-        ret_type = self.eat('KEYWORD').value     # int / void / etc.
+        ret_type = self.eat('KEYWORD').value
         name     = self.eat('IDENTIFIER').value
         self.eat('LPAREN')
         params = self.parse_params()
@@ -192,7 +158,7 @@ class Parser:
         params = []
         while self.current().type != 'RPAREN':
             if self.current().type == 'EOF':
-                break
+                raise SyntaxError("Unexpected end of input while parsing function parameters.")
             p_type = self.eat('KEYWORD').value
             p_name = self.eat('IDENTIFIER').value
             params.append((p_type, p_name))
@@ -204,43 +170,39 @@ class Parser:
         self.eat('LBRACE')
         stmts = []
         while self.current().type not in ('RBRACE', 'EOF'):
-            stmts.append(self.parse_statement())
+            res = self.parse_statement()
+            if isinstance(res, list):
+                stmts.extend(res)
+            else:
+                stmts.append(res)
         self.eat('RBRACE')
         return BlockNode(stmts)
 
     def parse_statement(self):
         tok = self.current()
 
-        # Variable declaration: int x = 5;
         if self.is_type_keyword():
             return self.parse_declaration()
 
-        # if statement
         if tok.type == 'KEYWORD' and tok.value == 'if':
             return self.parse_if()
 
-        # while loop
         if tok.type == 'KEYWORD' and tok.value == 'while':
             return self.parse_while()
 
-        # for loop
         if tok.type == 'KEYWORD' and tok.value == 'for':
             return self.parse_for()
 
-        # return statement
         if tok.type == 'KEYWORD' and tok.value == 'return':
             return self.parse_return()
 
-        # printf
         if tok.type == 'KEYWORD' and tok.value == 'printf':
             return self.parse_print()
 
-        # Assignment: x = expr; OR *p = expr;
         if tok.type == 'IDENTIFIER' and self.peek().type == 'ASSIGN':
             return self.parse_assignment()
-        
+
         if tok.type == 'MULTIPLY' and self.peek().type == 'IDENTIFIER' and self.peek(2).type == 'ASSIGN':
-             # Handle *p = val
              self.eat('MULTIPLY')
              name = self.eat('IDENTIFIER').value
              self.eat('ASSIGN')
@@ -248,29 +210,39 @@ class Parser:
              self.eat('SEMICOLON')
              return AssignNode(DereferenceNode(IdentifierNode(name)), value)
 
-        # Expression statement (function call, etc.)
         expr = self.parse_expr()
         self.eat('SEMICOLON')
         return expr
 
     def parse_declaration(self):
-        var_type = self.eat('KEYWORD').value
-        # Handle pointers: int* p, int** pp
-        stars = 0
-        while self.current().type == 'MULTIPLY':
-            self.eat('MULTIPLY')
-            stars += 1
-        
-        if stars > 0:
-            var_type = PointerTypeNode(var_type, stars)
-            
-        name     = self.eat('IDENTIFIER').value
-        value    = None
-        if self.current().type == 'ASSIGN':
-            self.eat('ASSIGN')
-            value = self.parse_expr()
+        base_type_raw = self.eat('KEYWORD').value
+
+        decls = []
+        while True:
+            stars = 0
+            while self.current().type == 'MULTIPLY':
+                self.eat('MULTIPLY')
+                stars += 1
+
+            var_type = base_type_raw
+            if stars > 0:
+                var_type = PointerTypeNode(base_type_raw, stars)
+
+            name = self.eat('IDENTIFIER').value
+            value = None
+            if self.current().type == 'ASSIGN':
+                self.eat('ASSIGN')
+                value = self.parse_expr()
+
+            decls.append(DeclarationNode(var_type, name, value))
+
+            if self.current().type == 'COMMA':
+                self.eat('COMMA')
+            else:
+                break
+
         self.eat('SEMICOLON')
-        return DeclarationNode(var_type, name, value)
+        return decls
 
     def parse_assignment(self):
         name = self.eat('IDENTIFIER').value
@@ -302,25 +274,44 @@ class Parser:
     def parse_for(self):
         self.eat('KEYWORD', 'for')
         self.eat('LPAREN')
-        # init
         init = None
         if self.is_type_keyword():
-            var_type = self.eat('KEYWORD').value
-            vname    = self.eat('IDENTIFIER').value
-            self.eat('ASSIGN')
-            val  = self.parse_expr()
-            init = DeclarationNode(var_type, vname, val)
+            init = self.parse_declaration_no_semi()
+        elif self.current().type == 'IDENTIFIER':
+             init = self.parse_update()
+
         self.eat('SEMICOLON')
         cond = self.parse_expr()
         self.eat('SEMICOLON')
-        # update (e.g. i++)
         update = self.parse_update()
         self.eat('RPAREN')
         body = self.parse_block()
         return ForNode(init, cond, update, body)
 
+    def parse_declaration_no_semi(self):
+        base_type_raw = self.eat('KEYWORD').value
+        decls = []
+        while True:
+            stars = 0
+            while self.current().type == 'MULTIPLY':
+                self.eat('MULTIPLY')
+                stars += 1
+            var_type = base_type_raw
+            if stars > 0:
+                var_type = PointerTypeNode(base_type_raw, stars)
+            name = self.eat('IDENTIFIER').value
+            value = None
+            if self.current().type == 'ASSIGN':
+                self.eat('ASSIGN')
+                value = self.parse_expr()
+            decls.append(DeclarationNode(var_type, name, value))
+            if self.current().type == 'COMMA':
+                self.eat('COMMA')
+            else:
+                break
+        return decls
+
     def parse_update(self):
-        """Parse simple loop updates: i++, i--, i = i + 1"""
         name = self.eat('IDENTIFIER').value
         if self.current().type == 'OP' and self.current().value == '++':
             self.eat('OP')
@@ -328,7 +319,6 @@ class Parser:
         if self.current().type == 'OP' and self.current().value == '--':
             self.eat('OP')
             return AssignNode(IdentifierNode(name), BinOpNode(IdentifierNode(name), '-', NumberNode(1)))
-        # fallback: i = expr
         self.eat('ASSIGN')
         val = self.parse_expr()
         return AssignNode(IdentifierNode(name), val)
@@ -344,6 +334,8 @@ class Parser:
         self.eat('LPAREN')
         args = []
         while self.current().type != 'RPAREN':
+            if self.current().type == 'EOF':
+                raise SyntaxError("Unexpected end of input inside printf arguments.")
             args.append(self.parse_expr())
             if self.current().type == 'COMMA':
                 self.eat('COMMA')
@@ -351,10 +343,7 @@ class Parser:
         self.eat('SEMICOLON')
         return PrintNode(args)
 
-    # ---- Expression parsing (with precedence) ----
-
     def parse_expr(self):
-        """Logical expressions: &&, ||"""
         left = self.parse_comparison()
         while self.current().type == 'OP' and self.current().value in ('&&', '||'):
             op    = self.eat('OP').value
@@ -363,7 +352,6 @@ class Parser:
         return left
 
     def parse_comparison(self):
-        """Relational: ==, !=, <, >, <=, >="""
         left = self.parse_term()
         while True:
             tok = self.current()
@@ -377,7 +365,6 @@ class Parser:
         return left
 
     def parse_term(self):
-        """Addition and subtraction"""
         left = self.parse_factor()
         while self.current().type in ('PLUS', 'MINUS'):
             op    = self.eat(self.current().type).value
@@ -386,7 +373,6 @@ class Parser:
         return left
 
     def parse_factor(self):
-        """Multiplication, division, modulo"""
         left = self.parse_unary()
         while self.current().type in ('MULTIPLY', 'DIVIDE', 'MODULO'):
             op    = self.eat(self.current().type).value
@@ -395,22 +381,21 @@ class Parser:
         return left
 
     def parse_unary(self):
-        """Unary operators: -, *, &"""
         if self.current().type == 'MINUS':
             self.eat('MINUS')
             operand = self.parse_unary()
             return UnaryOpNode('-', operand)
-        
+
         if self.current().type == 'MULTIPLY':
             self.eat('MULTIPLY')
             operand = self.parse_unary()
             return DereferenceNode(operand)
-            
+
         if self.current().type == 'ADDR':
             self.eat('ADDR')
             operand = self.parse_unary()
             return AddressOfNode(operand)
-            
+
         return self.parse_primary()
 
     def parse_primary(self):
@@ -426,7 +411,7 @@ class Parser:
 
         if tok.type == 'STRING':
             self.eat('STRING')
-            return StringNode(tok.value[1:-1])   # strip quotes
+            return StringNode(tok.value[1:-1])
 
         if tok.type == 'CHAR_LIT':
             self.eat('CHAR_LIT')
@@ -434,11 +419,12 @@ class Parser:
 
         if tok.type == 'IDENTIFIER':
             name = self.eat('IDENTIFIER').value
-            # Function call?
             if self.current().type == 'LPAREN':
                 self.eat('LPAREN')
                 args = []
                 while self.current().type != 'RPAREN':
+                    if self.current().type == 'EOF':
+                        raise SyntaxError(f"Unexpected end of input in call to '{name}'.")
                     args.append(self.parse_expr())
                     if self.current().type == 'COMMA':
                         self.eat('COMMA')
@@ -455,11 +441,10 @@ class Parser:
         raise SyntaxError(f"Line {tok.line}: Unexpected token '{tok.value}' ({tok.type})")
 
 
-# ---------------------------------------------------------------
-# AST PRINTER — visualise the tree in text form
-# ---------------------------------------------------------------
 class ASTPrinter:
     def print(self, node, indent=0):
+        if node is None:
+            return
         pad = '  ' * indent
         name = type(node).__name__
 
@@ -504,7 +489,12 @@ class ASTPrinter:
 
         elif isinstance(node, ForNode):
             print(f"{pad}ForNode")
-            if node.init: self.print(node.init, indent + 1)
+            if node.init:
+                if isinstance(node.init, list):
+                    for item in node.init:
+                        self.print(item, indent + 1)
+                else:
+                    self.print(node.init, indent + 1)
             self.print(node.condition, indent + 1)
             self.print(node.update, indent + 1)
             self.print(node.body, indent + 1)
@@ -556,9 +546,6 @@ class ASTPrinter:
             print(f"{pad}{name}")
 
 
-# ---------------------------------------------------------------
-# STANDALONE TEST
-# ---------------------------------------------------------------
 if __name__ == '__main__':
     code = """
 int main() {

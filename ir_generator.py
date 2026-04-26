@@ -6,10 +6,9 @@ from parser import (Parser, ProgramNode, FunctionNode, BlockNode,
                     PointerTypeNode, DereferenceNode, AddressOfNode)
 
 
-
 class IRInstruction:
     def __init__(self, op, arg1=None, arg2=None, result=None):
-        self.op     = op     
+        self.op     = op
         self.arg1   = arg1
         self.arg2   = arg2
         self.result = result
@@ -42,7 +41,6 @@ class IRInstruction:
         return f"{self.op}"
 
 
-
 class IRGenerator:
     def __init__(self):
         self.instructions = []
@@ -50,13 +48,11 @@ class IRGenerator:
         self._label_count = 0
 
     def new_temp(self):
-        """Generate a unique temporary variable name: t0, t1, ..."""
         name = f't{self._temp_count}'
         self._temp_count += 1
         return name
 
     def new_label(self):
-        """Generate a unique label name: L0, L1, ..."""
         name = f'L{self._label_count}'
         self._label_count += 1
         return name
@@ -66,19 +62,20 @@ class IRGenerator:
         self.instructions.append(instr)
         return instr
 
-
     def generate(self, node):
+        if node is None:
+            return self.instructions
         self.visit(node)
         return self.instructions
 
     def visit(self, node):
+        if node is None:
+            return None
         method = f'visit_{type(node).__name__}'
         return getattr(self, method, self.generic_visit)(node)
 
     def generic_visit(self, node):
         return None
-
-
 
     def visit_ProgramNode(self, node):
         for fn in node.functions:
@@ -99,7 +96,6 @@ class IRGenerator:
     def visit_DeclarationNode(self, node):
         res_name = node.name
         if isinstance(node.var_type, PointerTypeNode):
-            # For pointers, we treat the type as including the stars
             var_type = f"{node.var_type.base_type}{'*' * node.var_type.levels}"
         else:
             var_type = node.var_type
@@ -113,7 +109,6 @@ class IRGenerator:
     def visit_AssignNode(self, node):
         val = self.visit(node.value)
         if isinstance(node.target, DereferenceNode):
-            # Assignment to *p
             ptr = self.visit(node.target.operand)
             self.emit('STORE', arg1=val, result=ptr)
         else:
@@ -144,7 +139,11 @@ class IRGenerator:
 
     def visit_ForNode(self, node):
         if node.init:
-            self.visit(node.init)
+            if isinstance(node.init, list):
+                for stmt in node.init:
+                    self.visit(stmt)
+            else:
+                self.visit(node.init)
         start_lbl = self.new_label()
         end_lbl   = self.new_label()
         self.emit('LABEL', result=start_lbl)
@@ -207,8 +206,6 @@ class IRGenerator:
         self.emit('CALL', arg1=node.name, arg2=len(node.args), result=temp)
         return temp
 
-
-
     def print_ir(self):
         print("\n" + "="*55)
         print("PHASE 4: THREE-ADDRESS CODE (INTERMEDIATE REPR.)")
@@ -217,7 +214,6 @@ class IRGenerator:
             prefix = '    ' if instr.op not in ('FUNC', 'END_FUNC', 'LABEL') else ''
             print(f"{i:>3}  {prefix}{instr}")
         print("="*55)
-
 
 
 if __name__ == '__main__':
