@@ -1,16 +1,15 @@
 from lexer import Lexer, Token
 
-
 class ProgramNode:
     def __init__(self, functions):
         self.functions = functions
-
+        
 class FunctionNode:
     def __init__(self, return_type, name, params, body):
         self.return_type = return_type
-        self.name        = name
-        self.params      = params
-        self.body        = body
+        self.name = name
+        self.params = params
+        self.body = body
 
 class BlockNode:
     def __init__(self, statements):
@@ -19,31 +18,39 @@ class BlockNode:
 class DeclarationNode:
     def __init__(self, var_type, name, value=None):
         self.var_type = var_type
-        self.name     = name
-        self.value    = value
+        self.name = name
+        self.value = value
+
+class ArrayDeclarationNode:
+    def __init__(self, var_type, name, rows, cols=None, values=None):
+        self.var_type = var_type
+        self.name = name
+        self.rows = rows
+        self.cols = cols
+        self.values = values
 
 class AssignNode:
     def __init__(self, target, value):
         self.target = target
-        self.value  = value
+        self.value = value
 
 class IfNode:
     def __init__(self, condition, then_block, else_block=None):
-        self.condition  = condition
+        self.condition = condition
         self.then_block = then_block
         self.else_block = else_block
 
 class WhileNode:
     def __init__(self, condition, body):
         self.condition = condition
-        self.body      = body
+        self.body = body
 
 class ForNode:
     def __init__(self, init, condition, update, body):
-        self.init      = init
+        self.init = init
         self.condition = condition
-        self.update    = update
-        self.body      = body
+        self.update = update
+        self.body = body
 
 class ReturnNode:
     def __init__(self, value):
@@ -55,13 +62,13 @@ class PrintNode:
 
 class BinOpNode:
     def __init__(self, left, op, right):
-        self.left  = left
-        self.op    = op
+        self.left = left
+        self.op = op
         self.right = right
 
 class UnaryOpNode:
     def __init__(self, op, operand):
-        self.op      = op
+        self.op = op
         self.operand = operand
 
 class NumberNode:
@@ -84,7 +91,7 @@ class FunctionCallNode:
 class PointerTypeNode:
     def __init__(self, base_type, levels):
         self.base_type = base_type
-        self.levels    = levels
+        self.levels = levels
 
 class DereferenceNode:
     def __init__(self, operand):
@@ -94,13 +101,19 @@ class AddressOfNode:
     def __init__(self, operand):
         self.operand = operand
 
+class ArrayAccessNode:
+    def __init__(self, name, index1, index2=None):
+        self.name = name
+        self.index1 = index1
+        self.index2 = index2
+
 
 class Parser:
     def __init__(self, tokens):
         if not tokens:
             raise SyntaxError("No tokens to parse — input may be empty.")
         self.tokens = tokens
-        self.pos    = 0
+        self.pos = 0
 
     def current(self):
         if self.pos < len(self.tokens):
@@ -147,7 +160,7 @@ class Parser:
 
     def parse_function(self):
         ret_type = self.eat('KEYWORD').value
-        name     = self.eat('IDENTIFIER').value
+        name = self.eat('IDENTIFIER').value
         self.eat('LPAREN')
         params = self.parse_params()
         self.eat('RPAREN')
@@ -202,13 +215,17 @@ class Parser:
         if tok.type == 'IDENTIFIER' and self.peek().type == 'ASSIGN':
             return self.parse_assignment()
 
+        if tok.type == 'IDENTIFIER' and self.peek().type == 'LBRACKET':
+            # arr[i] = value or arr[i][j] = value
+            return self.parse_array_assignment()
+
         if tok.type == 'MULTIPLY' and self.peek().type == 'IDENTIFIER' and self.peek(2).type == 'ASSIGN':
-             self.eat('MULTIPLY')
-             name = self.eat('IDENTIFIER').value
-             self.eat('ASSIGN')
-             value = self.parse_expr()
-             self.eat('SEMICOLON')
-             return AssignNode(DereferenceNode(IdentifierNode(name)), value)
+            self.eat('MULTIPLY')
+            name = self.eat('IDENTIFIER').value
+            self.eat('ASSIGN')
+            value = self.parse_expr()
+            self.eat('SEMICOLON')
+            return AssignNode(DereferenceNode(IdentifierNode(name)), value)
 
         expr = self.parse_expr()
         self.eat('SEMICOLON')
@@ -216,8 +233,8 @@ class Parser:
 
     def parse_declaration(self):
         base_type_raw = self.eat('KEYWORD').value
-
         decls = []
+
         while True:
             stars = 0
             while self.current().type == 'MULTIPLY':
@@ -229,6 +246,35 @@ class Parser:
                 var_type = PointerTypeNode(base_type_raw, stars)
 
             name = self.eat('IDENTIFIER').value
+
+            if self.current().type == 'LBRACKET':
+                self.eat('LBRACKET')
+                rows = self.eat('INTEGER').value
+                self.eat('RBRACKET')
+
+                cols = None
+                # 2D array
+                if self.current().type == 'LBRACKET':
+                    self.eat('LBRACKET')
+                    cols = self.eat('INTEGER').value
+                    self.eat('RBRACKET')
+
+                values = None
+                # initializer
+                if self.current().type == 'ASSIGN':
+                    self.eat('ASSIGN')
+                    values = self.parse_initializer()
+
+                self.eat('SEMICOLON')
+
+                return ArrayDeclarationNode(
+                    var_type,
+                    name,
+                    int(rows),
+                    int(cols) if cols else None,
+                    values
+                )
+
             value = None
             if self.current().type == 'ASSIGN':
                 self.eat('ASSIGN')
@@ -244,12 +290,47 @@ class Parser:
         self.eat('SEMICOLON')
         return decls
 
+    def parse_initializer(self):
+        """Parse array initializer: { val1, val2, ... }"""
+        values = []
+        self.eat('LBRACE')
+
+        while self.current().type != 'RBRACE':
+            values.append(self.parse_expr())
+            if self.current().type == 'COMMA':
+                self.eat('COMMA')
+
+        self.eat('RBRACE')
+        return values
+
     def parse_assignment(self):
         name = self.eat('IDENTIFIER').value
         self.eat('ASSIGN')
         value = self.parse_expr()
         self.eat('SEMICOLON')
         return AssignNode(IdentifierNode(name), value)
+
+    def parse_array_assignment(self):
+        """Handle array[i] = value or array[i][j] = value"""
+        name = self.eat('IDENTIFIER').value
+
+        self.eat('LBRACKET')
+        idx1 = self.parse_expr()
+        self.eat('RBRACKET')
+
+        idx2 = None
+        if self.current().type == 'LBRACKET':
+            self.eat('LBRACKET')
+            idx2 = self.parse_expr()
+            self.eat('RBRACKET')
+
+        target = ArrayAccessNode(name, idx1, idx2)
+
+        self.eat('ASSIGN')
+        val = self.parse_expr()
+        self.eat('SEMICOLON')
+
+        return AssignNode(target, val)
 
     def parse_if(self):
         self.eat('KEYWORD', 'if')
@@ -278,7 +359,7 @@ class Parser:
         if self.is_type_keyword():
             init = self.parse_declaration_no_semi()
         elif self.current().type == 'IDENTIFIER':
-             init = self.parse_update()
+            init = self.parse_update()
 
         self.eat('SEMICOLON')
         cond = self.parse_expr()
@@ -346,9 +427,9 @@ class Parser:
     def parse_expr(self):
         left = self.parse_comparison()
         while self.current().type == 'OP' and self.current().value in ('&&', '||'):
-            op    = self.eat('OP').value
+            op = self.eat('OP').value
             right = self.parse_comparison()
-            left  = BinOpNode(left, op, right)
+            left = BinOpNode(left, op, right)
         return left
 
     def parse_comparison(self):
@@ -357,9 +438,9 @@ class Parser:
             tok = self.current()
             if tok.type in ('LT', 'GT') or \
                (tok.type == 'OP' and tok.value in ('==', '!=', '<=', '>=')):
-                op    = self.eat(tok.type).value
+                op = self.eat(tok.type).value
                 right = self.parse_term()
-                left  = BinOpNode(left, op, right)
+                left = BinOpNode(left, op, right)
             else:
                 break
         return left
@@ -367,17 +448,17 @@ class Parser:
     def parse_term(self):
         left = self.parse_factor()
         while self.current().type in ('PLUS', 'MINUS'):
-            op    = self.eat(self.current().type).value
+            op = self.eat(self.current().type).value
             right = self.parse_factor()
-            left  = BinOpNode(left, op, right)
+            left = BinOpNode(left, op, right)
         return left
 
     def parse_factor(self):
         left = self.parse_unary()
         while self.current().type in ('MULTIPLY', 'DIVIDE', 'MODULO'):
-            op    = self.eat(self.current().type).value
+            op = self.eat(self.current().type).value
             right = self.parse_unary()
-            left  = BinOpNode(left, op, right)
+            left = BinOpNode(left, op, right)
         return left
 
     def parse_unary(self):
@@ -419,6 +500,20 @@ class Parser:
 
         if tok.type == 'IDENTIFIER':
             name = self.eat('IDENTIFIER').value
+
+            if self.current().type == 'LBRACKET':
+                self.eat('LBRACKET')
+                idx1 = self.parse_expr()
+                self.eat('RBRACKET')
+
+                idx2 = None
+                if self.current().type == 'LBRACKET':
+                    self.eat('LBRACKET')
+                    idx2 = self.parse_expr()
+                    self.eat('RBRACKET')
+
+                return ArrayAccessNode(name, idx1, idx2)
+
             if self.current().type == 'LPAREN':
                 self.eat('LPAREN')
                 args = []
@@ -430,6 +525,7 @@ class Parser:
                         self.eat('COMMA')
                 self.eat('RPAREN')
                 return FunctionCallNode(name, args)
+
             return IdentifierNode(name)
 
         if tok.type == 'LPAREN':
@@ -466,6 +562,14 @@ class ASTPrinter:
             print(f"{pad}DeclarationNode: {node.var_type} {node.name}")
             if node.value:
                 self.print(node.value, indent + 1)
+
+        elif isinstance(node, ArrayDeclarationNode):
+            cols_str = f", {node.cols}" if node.cols else ""
+            print(f"{pad}ArrayDeclarationNode: {node.var_type} {node.name}[{node.rows}{cols_str}]")
+            if node.values:
+                print(f"{pad}  initializer:")
+                for v in node.values:
+                    self.print(v, indent + 2)
 
         elif isinstance(node, AssignNode):
             print(f"{pad}AssignNode")
@@ -526,6 +630,14 @@ class ASTPrinter:
         elif isinstance(node, IdentifierNode):
             print(f"{pad}IdentifierNode: {node.name}")
 
+        elif isinstance(node, ArrayAccessNode):
+            print(f"{pad}ArrayAccessNode: {node.name}")
+            print(f"{pad}  index1:")
+            self.print(node.index1, indent + 2)
+            if node.index2:
+                print(f"{pad}  index2:")
+                self.print(node.index2, indent + 2)
+
         elif isinstance(node, PointerTypeNode):
             print(f"{pad}PointerType: {node.base_type}{'*' * node.levels}")
 
@@ -552,6 +664,9 @@ int main() {
     int x = 10;
     int y = 20;
     int sum = x + y;
+    int arr[5] = {1, 2, 3, 4, 5};
+    arr[0] = 100;
+    int matrix[3][3] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
     if (sum > 25) {
         printf("Sum is large");
     } else {
@@ -560,14 +675,14 @@ int main() {
     return 0;
 }
 """
-    lexer  = Lexer(code)
+    lexer = Lexer(code)
     tokens = lexer.tokenize()
 
     parser = Parser(tokens)
-    ast    = parser.parse()
+    ast = parser.parse()
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("PHASE 2: ABSTRACT SYNTAX TREE")
-    print("="*50)
+    print("=" * 50)
     ASTPrinter().print(ast)
-    print("="*50)
+    print("=" * 50)
