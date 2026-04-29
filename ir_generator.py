@@ -3,14 +3,15 @@ from parser import (Parser, ProgramNode, FunctionNode, BlockNode,
                     DeclarationNode, AssignNode, IfNode, WhileNode, ForNode,
                     ReturnNode, PrintNode, BinOpNode, UnaryOpNode,
                     NumberNode, StringNode, IdentifierNode, FunctionCallNode,
-                    PointerTypeNode, DereferenceNode, AddressOfNode)
+                    PointerTypeNode, DereferenceNode, AddressOfNode,
+                    ArrayDeclarationNode, ArrayAccessNode)
 
 
 class IRInstruction:
     def __init__(self, op, arg1=None, arg2=None, result=None):
-        self.op     = op
-        self.arg1   = arg1
-        self.arg2   = arg2
+        self.op = op
+        self.arg1 = arg1
+        self.arg2 = arg2
         self.result = result
 
     def __repr__(self):
@@ -34,6 +35,14 @@ class IRInstruction:
             return f"\nFUNC {self.result}({self.arg1})"
         if self.op == 'END_FUNC':
             return f"END_FUNC\n"
+        if self.op == 'LOAD':
+            return f"{self.result} = LOAD {self.arg1}"
+        if self.op == 'STORE':
+            return f"STORE {self.arg1} -> {self.result}"
+        if self.op == 'ARR_DECL':
+            return f"ARRAY {self.result}[{self.arg1}]"
+        if self.op == 'ARR2_DECL':
+            return f"ARRAY {self.result}[{self.arg1}][{self.arg2}]"
         if self.arg2 is not None:
             return f"{self.result} = {self.arg1} {self.op} {self.arg2}"
         if self.arg1 is not None:
@@ -44,7 +53,7 @@ class IRInstruction:
 class IRGenerator:
     def __init__(self):
         self.instructions = []
-        self._temp_count  = 0
+        self._temp_count = 0
         self._label_count = 0
 
     def new_temp(self):
@@ -106,8 +115,27 @@ class IRGenerator:
         else:
             self.emit('DECL', arg1=var_type, result=res_name)
 
+    def visit_ArrayDeclarationNode(self, node):
+        if node.cols is None:
+            self.emit('ARR_DECL', arg1=node.rows, result=node.name)
+            if node.values:
+                for i, val in enumerate(node.values):
+                    v = self.visit(val)
+                    self.emit('STORE', arg1=v, result=f"{node.name}[{i}]")
+        else:
+            self.emit('ARR2_DECL', arg1=node.rows, arg2=node.cols, result=node.name)
+
     def visit_AssignNode(self, node):
         val = self.visit(node.value)
+        if isinstance(node.target, ArrayAccessNode):
+            idx1 = self.visit(node.target.index1)
+            if node.target.index2 is None:
+                place = f"{node.target.name}[{idx1}]"
+            else:
+                idx2 = self.visit(node.target.index2)
+                place = f"{node.target.name}[{idx1}][{idx2}]"
+            self.emit('STORE', arg1=val, result=place)
+            return
         if isinstance(node.target, DereferenceNode):
             ptr = self.visit(node.target.operand)
             self.emit('STORE', arg1=val, result=ptr)
@@ -115,9 +143,9 @@ class IRGenerator:
             self.emit('=', arg1=val, result=node.target.name)
 
     def visit_IfNode(self, node):
-        cond      = self.visit(node.condition)
-        else_lbl  = self.new_label()
-        end_lbl   = self.new_label()
+        cond = self.visit(node.condition)
+        else_lbl = self.new_label()
+        end_lbl = self.new_label()
 
         self.emit('IF_FALSE', arg1=cond, result=else_lbl)
         self.visit(node.then_block)
@@ -129,7 +157,7 @@ class IRGenerator:
 
     def visit_WhileNode(self, node):
         start_lbl = self.new_label()
-        end_lbl   = self.new_label()
+        end_lbl = self.new_label()
         self.emit('LABEL', result=start_lbl)
         cond = self.visit(node.condition)
         self.emit('IF_FALSE', arg1=cond, result=end_lbl)
@@ -145,7 +173,7 @@ class IRGenerator:
             else:
                 self.visit(node.init)
         start_lbl = self.new_label()
-        end_lbl   = self.new_label()
+        end_lbl = self.new_label()
         self.emit('LABEL', result=start_lbl)
         cond = self.visit(node.condition)
         self.emit('IF_FALSE', arg1=cond, result=end_lbl)
@@ -164,29 +192,40 @@ class IRGenerator:
             self.emit('PRINT', arg1=val)
 
     def visit_BinOpNode(self, node):
-        left  = self.visit(node.left)
+        left = self.visit(node.left)
         right = self.visit(node.right)
-        temp  = self.new_temp()
+        temp = self.new_temp()
         self.emit(node.op, arg1=left, arg2=right, result=temp)
         return temp
 
     def visit_UnaryOpNode(self, node):
         operand = self.visit(node.operand)
-        temp    = self.new_temp()
+        temp = self.new_temp()
         op = 'UNARY_MINUS' if node.op == '-' else node.op
         self.emit(op, arg1=operand, result=temp)
         return temp
 
     def visit_DereferenceNode(self, node):
         operand = self.visit(node.operand)
-        temp    = self.new_temp()
+        temp = self.new_temp()
         self.emit('DEREF', arg1=operand, result=temp)
         return temp
 
     def visit_AddressOfNode(self, node):
         operand = self.visit(node.operand)
-        temp    = self.new_temp()
+        temp = self.new_temp()
         self.emit('ADDR', arg1=operand, result=temp)
+        return temp
+
+    def visit_ArrayAccessNode(self, node):
+        idx1 = self.visit(node.index1)
+        if node.index2 is None:
+            temp = self.new_temp()
+            self.emit('LOAD', arg1=f"{node.name}[{idx1}]", result=temp)
+            return temp
+        idx2 = self.visit(node.index2)
+        temp = self.new_temp()
+        self.emit('LOAD', arg1=f"{node.name}[{idx1}][{idx2}]", result=temp)
         return temp
 
     def visit_NumberNode(self, node):
@@ -222,6 +261,12 @@ int main() {
     int x = 5;
     int y = 3;
     int z = x + y * 2;
+    int arr[5] = {1, 2, 3, 4, 5};
+    arr[0] = 100;
+    int matrix[3][3] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
+    matrix[1][2] = 99;
+    int val = arr[0];
+    int elem = matrix[1][2];
     if (z > 10) {
         printf("big");
     } else {
@@ -234,10 +279,10 @@ int main() {
     return 0;
 }
 """
-    lexer  = Lexer(code)
+    lexer = Lexer(code)
     tokens = lexer.tokenize()
     parser = Parser(tokens)
-    ast    = parser.parse()
+    ast = parser.parse()
 
     irgen = IRGenerator()
     irgen.generate(ast)
